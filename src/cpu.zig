@@ -19,7 +19,7 @@ pub const Machine = struct {
         self.pc = self.op.nnn();
     }
 
-    pub fn op_sei(self: *Machine) void {
+    pub fn op_sen(self: *Machine) void {
         const r = self.op.x();
         const kk = self.op.kk();
         if (self.regs[r] == kk) {
@@ -27,7 +27,7 @@ pub const Machine = struct {
         }
     }
 
-    pub fn op_snei(self: *Machine) void {
+    pub fn op_snen(self: *Machine) void {
         const r = self.op.x();
         const kk = self.op.kk();
         if (self.regs[r] != kk) {
@@ -43,13 +43,13 @@ pub const Machine = struct {
         }
     }
 
-    pub fn op_ldi(self: *Machine) void {
+    pub fn op_ldn(self: *Machine) void {
         const r = self.op.x();
         const kk = self.op.kk();
         self.regs[r] = kk;
     }
 
-    pub fn op_addi(self: *Machine) void {
+    pub fn op_addn(self: *Machine) void {
         const r = self.op.x();
         const kk = self.op.kk();
         const res = @addWithOverflow(self.regs[r], kk);
@@ -57,22 +57,6 @@ pub const Machine = struct {
     }
 
     // 8xxx ALU ops
-    pub fn op_alu(self: *Machine) error{UnknownOp}!void {
-        const rx = self.op.x();
-        const ry = self.op.y();
-        switch (self.op.n) {
-            0x0 => self.op_ld(rx, ry),
-            0x1 => self.op_or(rx, ry),
-            0x2 => self.op_and(rx, ry),
-            0x3 => self.op_xor(rx, ry),
-            0x4 => self.op_add(rx, ry),
-            0x5 => self.op_sub(rx, ry),
-            0x6 => self.op_shr(rx, ry),
-            0x7 => self.op_subn(rx, ry),
-            0xE => self.op_shl(rx, ry),
-            else => return error.UnknownOp,
-        }
-    }
 
     pub fn op_ld(self: *Machine, rx: u4, ry: u4) void {
         self.regs[rx] = self.regs[ry];
@@ -102,6 +86,22 @@ pub const Machine = struct {
         self.regs[0xf] = ~res[1];
     }
 
+    pub fn op_shr(self: *Machine, rx: u4, ry: u4) void {
+        self.regs[0xf] = self.regs[rx] & 1;
+        self.regs[rx] = self.regs[rx] >> 1;
+    }
+
+    pub fn op_subn(self: *Machine, rx: u4, ry: u4) void {
+        const res = @subWithOverflow(self.regs[ry], self.regs[rx]);
+        self.regs[rx] = res[0];
+        self.regs[0xf] = ~res[1];
+    }
+
+    pub fn op_shl(self: *Machine, rx: u4, ry: u4) void {
+        self.regs[0xf] = self.regs[rx] >> 7;
+        self.regs[rx] = self.regs[rx] << 1;
+    }
+
     pub fn op_sne(self: *Machine) void {
         const rx = self.op.x();
         const ry = self.op.y();
@@ -109,6 +109,12 @@ pub const Machine = struct {
             self.pc += 2;
         }
     }
+
+    pub fn op_ldi(self: *Machine) void {
+        
+    }
+
+
 
     pub fn fetch(self: *Machine) u8 {
         const data = self.memory[self.pc];
@@ -130,7 +136,23 @@ pub const Machine = struct {
         self.op = op;
 
         switch (op.z()) {
-            1 => self.op_jp(),
+            0x1 => self.op_jp(),
+            0x8 => {
+                const rx = self.op.x();
+                const ry = self.op.y();
+                switch (self.op.n) {
+                    0x0 => self.op_ld(rx, ry),
+                    0x1 => self.op_or(rx, ry),
+                    0x2 => self.op_and(rx, ry),
+                    0x3 => self.op_xor(rx, ry),
+                    0x4 => self.op_add(rx, ry),
+                    0x5 => self.op_sub(rx, ry),
+                    0x6 => self.op_shr(rx, ry),
+                    0x7 => self.op_subn(rx, ry),
+                    0xE => self.op_shl(rx, ry),
+                    else => return error.UnknownOp,
+                }
+            }
             else => return error.UnknownOp,
         }
     }
