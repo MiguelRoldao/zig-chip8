@@ -2,9 +2,46 @@
 //! you are building an executable. If you are making a library, the convention
 //! is to delete this file and start with root.zig instead.
 
+const cpu = @import("cpu.zig");
+const Machine = cpu.Machine;
+
+pub fn loadRom(path: []const u8, machine: *Machine) !void {
+    const file = try std.fs.cwd().openFile(
+        path,
+        .{ .mode = .read_only },
+    );
+    defer file.close();
+    _ = try file.readAll(machine.memory[0x200..]);
+    std.debug.print("Loaded ROM: {s}", .{path});
+}
+
 pub fn main() !void {
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
     std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
+
+    var arg_iter = try std.process.argsWithAllocator(std.heap.page_allocator);
+    defer arg_iter.deinit();
+
+    var machine: Machine = undefined;
+    var loaded_rom = false;
+
+    while (arg_iter.next()) |arg| {
+        std.debug.print("Found arg: {s}\n", .{arg});
+
+        if (std.mem.eql(u8, arg, "-i")) {
+            if (arg_iter.next()) |input_path| {
+                try loadRom(input_path, &machine);
+            }
+            loaded_rom = true;
+        } else {
+            std.debug.print("Unknown argument: {s}\n", .{arg});
+        }
+    }
+
+    if (!loaded_rom) {
+        std.debug.print("No ROM loaded, exiting.\n", .{});
+        return error.NoRomLoaded;
+    }
 
     // stdout is for the actual output of your application, for example if you
     // are implementing gzip, then only the compressed bytes should be sent to

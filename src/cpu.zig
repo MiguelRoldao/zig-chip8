@@ -2,27 +2,184 @@ pub fn word(hi: u8, lo: u8) u16 {
     return @as(u16, hi) << 8 | @as(u16, lo);
 }
 
+const std = @import("std");
+
+const char_sprites = [16][5]u8{
+    [_]u8{
+        0b11110000,
+        0b10010000,
+        0b10010000,
+        0b10010000,
+        0b11110000,
+    },
+    [_]u8{
+        0b00100000,
+        0b01100000,
+        0b00100000,
+        0b00100000,
+        0b01110000,
+    },
+    [_]u8{
+        0b11110000,
+        0b00010000,
+        0b11110000,
+        0b10000000,
+        0b11110000,
+    },
+    [_]u8{
+        0b11110000,
+        0b00010000,
+        0b11110000,
+        0b00010000,
+        0b11110000,
+    },
+    [_]u8{
+        0b10010000,
+        0b10010000,
+        0b11110000,
+        0b00010000,
+        0b00010000,
+    },
+    [_]u8{
+        0b11110000,
+        0b10000000,
+        0b11110000,
+        0b00010000,
+        0b11110000,
+    },
+    [_]u8{
+        0b11110000,
+        0b10000000,
+        0b11110000,
+        0b10010000,
+        0b11110000,
+    },
+    [_]u8{
+        0b11110000,
+        0b00010000,
+        0b00100000,
+        0b01000000,
+        0b01000000,
+    },
+    [_]u8{
+        0b11110000,
+        0b10010000,
+        0b11110000,
+        0b10010000,
+        0b11110000,
+    },
+    [_]u8{
+        0b11110000,
+        0b10010000,
+        0b11110000,
+        0b00010000,
+        0b11110000,
+    },
+    [_]u8{
+        0b11110000,
+        0b10010000,
+        0b11110000,
+        0b10010000,
+        0b10010000,
+    },
+    [_]u8{
+        0b11100000,
+        0b10010000,
+        0b11100000,
+        0b10010000,
+        0b11100000,
+    },
+    [_]u8{
+        0b11110000,
+        0b10000000,
+        0b10000000,
+        0b10000000,
+        0b11110000,
+    },
+    [_]u8{
+        0b11100000,
+        0b10010000,
+        0b10010000,
+        0b10010000,
+        0b11100000,
+    },
+    [_]u8{
+        0b11110000,
+        0b10000000,
+        0b11110000,
+        0b10000000,
+        0b11110000,
+    },
+    [_]u8{
+        0b11110000,
+        0b10000000,
+        0b11110000,
+        0b10000000,
+        0b10000000,
+    },
+};
+
 pub const Machine = struct {
-    memory: [0x1000]u8,
-    vram: [64 * 32]bool,
-    regs: [16]u8,
-    I: u16,
-    sound_timer: u8,
-    delay_timer: u8,
-    pc: u16,
-    sp: u8,
-    stack: [0x100]u16,
+    memory: [0x1000]u8 = undefined,
+    vram: [64 * 32]u1 = undefined,
+    regs: [16]u8 = undefined,
+    I: u16 = 0,
+    sound_timer: u8 = 0,
+    delay_timer: u8 = 0,
+    pc: u16 = 0x200,
+    sp: u8 = 0,
+    stack: [0x100]u16 = undefined,
 
-    keyboard: [16]bool,
+    keyboard: [16]bool = undefined,
 
-    op: Instruction,
+    op: Instruction = undefined,
 
+    rng: std.Random = undefined,
+
+    pub fn init(self: *Machine) void {
+        // copy char prites to memory
+        for (char_sprites, 0..) |char_sprite, i| {
+            for (char_sprite, 0..) |sprite, j| {
+                self.memory[i * char_sprite.len + j] = sprite;
+            }
+        }
+
+        self.rng = std.Random.DefaultPrng.init(0).random();
+    }
+
+    pub fn read(self: *Machine, addr: u16) u8 {
+        return self.memory[addr % self.memory.len];
+    }
+
+    pub fn write(self: *Machine, addr: u16, data: u8) void {
+        self.memory[addr % self.memory.len] = data;
+    }
+
+    // TODO: make this untied to screen resolotion
+    pub fn read_vram(self: *Machine, x: u8, y: u8) u1 {
+        const pos = (x % 64) + (y % 32) * 64;
+        return self.vram[pos];
+    }
+
+    // TODO: make this untied to screen resolotion
+    pub fn write_vram(self: *Machine, x: u8, y: u8, data: u1) void {
+        const pos = (x % 64) + (y % 32) * 64;
+        self.vram[pos] = data;
+    }
+
+    // TODO: make this untied to screen resolotion
+    pub fn write_vram_xor(self: *Machine, x: u8, y: u8, data: u1) void {
+        const pos = (x % 64) + (y % 32) * 64;
+        self.vram[pos] ^= data;
+    }
+
+    // ***** OPCODES ***** //
     pub fn op_cls(self: *Machine) void {
-        self.vram = [_]bool{false} ** self.vram.len;
+        self.vram = [_]u1{0} ** self.vram.len;
     }
 
     pub fn op_ret(self: *Machine) void {
-        self.sp -= 1;
+        self.sp -%= 1;
         self.pc = self.stack[self.sp];
     }
 
@@ -32,7 +189,7 @@ pub const Machine = struct {
 
     pub fn op_call(self: *Machine) void {
         self.stack[self.sp] = self.pc;
-        self.sp += 1;
+        self.sp +%= 1;
         self.pc = self.op.nnn();
     }
 
@@ -139,13 +296,24 @@ pub const Machine = struct {
     }
 
     pub fn op_rnd(self: *Machine) void {
-        // TODO: generate random number
-        const rng: u8 = 0xAA;
-        const rx = self.op.x();
-        self.regs[rx] &= rng;
+        const num = self.rng.int(u8);
+        const kk = self.op.kk();
+        self.regs[self.op.x()] = num & kk;
     }
 
-    // TODO: draw
+    pub fn op_drw(self: *Machine) void {
+        var collision: u1 = 0;
+        for (0..self.op.n()) |n| {
+            const sprite = self.read(self.I + n);
+            for (0..8) |i| {
+                const x: u8 = self.op.x() + i;
+                const y: u8 = self.op.y() + n;
+                const pixel: u1 = (sprite >> (7 - i)) & 1;
+                collision |= ~(pixel ^ self.read_vram(x, y));
+                self.write_vram_xor(x, y, pixel);
+            }
+        }
+    }
 
     pub fn op_skp(self: *Machine) void {
         const rx: u4 = @intCast(self.regs[self.op.x()]);
@@ -188,8 +356,9 @@ pub const Machine = struct {
         self.I +%= self.regs[self.op.x()];
     }
 
-    // TODO:
-    //pub fn op_ld_f_vx
+    pub fn op_ld_f_vx(self: *Machine) void {
+        self.I = char_sprites[0].len * self.regs[self.op.x() % 16];
+    }
 
     // BCD representation
     pub fn op_ld_b_vx(self: *Machine) void {
@@ -197,32 +366,32 @@ pub const Machine = struct {
         const ones: u8 = vx % 10;
         const tens: u8 = vx / 10 % 10;
         const hundreds: u8 = vx / 100 % 10;
-        self.memory[self.I] = hundreds;
-        self.memory[self.I + 1] = tens;
-        self.memory[self.I + 2] = ones;
+        self.write(self.I, hundreds);
+        self.write(self.I + 1, tens);
+        self.write(self.I + 2, ones);
     }
 
     pub fn op_push(self: *Machine) void {
         for (0..self.op.x()) |i| {
-            self.memory[self.I + i] = self.regs[i];
+            self.write(self.I + i, self.regs[i]);
         }
     }
 
     pub fn op_pop(self: *Machine) void {
         for (0..self.op.x()) |i| {
-            self.regs[i] = self.memory[self.I + i];
+            self.regs[i] = self.read(self.I + i);
         }
     }
 
     pub fn fetch(self: *Machine) u8 {
-        const data = self.memory[self.pc];
+        const data = self.read(self.pc);
         self.pc += 1;
         return data;
     }
 
     pub fn fetch16(self: *Machine) u16 {
-        const hi = self.memory[self.pc];
-        const lo = self.memory[self.pc + 1];
+        const hi = self.read(self.pc);
+        const lo = self.read(self.pc + 1);
         self.pc += 2;
         return word(hi, lo);
     }
@@ -266,7 +435,7 @@ pub const Machine = struct {
             0xA => self.op_ldi(),
             0xB => self.op_jpr(),
             0xC => self.op_rnd(),
-            //0xD TODO
+            0xD => self.op_drw(),
             0xE => switch (self.op.n) {
                 0x9E => self.op_skp(),
                 0xA1 => self.op_sknp(),
@@ -278,7 +447,7 @@ pub const Machine = struct {
                 0x15 => self.op_ld_dt_vx(),
                 0x18 => self.op_ld_st_vx(),
                 0x1E => self.op_add_i_vx(),
-                //0x29 TODO
+                0x29 => self.op_ld_f_vx(),
                 0x33 => self.op_ld_b_vx(),
                 0x55 => self.op_push(),
                 0x65 => self.op_pop(),
@@ -301,18 +470,18 @@ pub const Instruction = struct {
     }
 
     pub fn z(self: Instruction) u4 {
-        return @intCast(self.hi >> 12);
+        return @intCast(self.op >> 12);
     }
 
     pub fn x(self: Instruction) u4 {
-        return @intCast(self.hi >> 8);
+        return @intCast(self.op >> 8);
     }
 
     pub fn y(self: Instruction) u4 {
-        return @intCast(self.lo >> 4);
+        return @intCast(self.op >> 4);
     }
 
     pub fn n(self: Instruction) u4 {
-        return @intCast(self.lo);
+        return @intCast(self.op);
     }
 };
